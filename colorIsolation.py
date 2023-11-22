@@ -98,6 +98,16 @@ def printOriginalImage(image_path):
     plt.imshow(image)
 
 def find_polygon_centers(matrix):
+    """
+    find_polygon_centers()
+    -------------------
+    The three pointers represented as polygons are analyzed to get their centers
+    
+    ### INPUTS
+    * `matrix`: contains the mask of the image in 2D.
+    ### OUTPUTS
+    * `polygons`: contains the polygon centers 
+    """
     labeled_matrix, num_labels = label(matrix)
     
     polygons = []
@@ -109,9 +119,32 @@ def find_polygon_centers(matrix):
     return polygons
 
 def distance_between_two_points(point1, point2):
+    """
+    distance_between_two_points()
+    -------------------
+    Evaluate the distance between two points.
+    
+    ### INPUTS
+    * `point1`: Right point of them
+    ### OUTPUTS
+    * `point2`: Left point of them
+    """
     return np.linalg.norm(point1 - point2)
 
 def wireMeasures(matrix):
+    """
+    wireMeasures()
+    -------------------
+    Evaluate the distance and the angle between the lateral point and the central of the wire 
+    
+    ### INPUTS
+    * `matrix`: path of the image that you want to analyze.
+    ### OUTPUTS
+    * `leftLength`: The lenght of the left part of the wire (looking from the frontside)
+    * `rightLength`: The lenght of the right part of the wire (looking from the frontside)
+    * `leftAngle`: The angle of the left part of the wire from the central reference (looking from the frontside)
+    * `rightAngle`: The angle of the right part of the wire from the central reference (looking from the frontside)
+    """
     # Find polygon centers
     polygon_centers = find_polygon_centers(matrix)
 
@@ -120,22 +153,22 @@ def wireMeasures(matrix):
         center1, center2, center3 = polygon_centers
 
         # Evaluate distance between the two polygons at the sides from the one in the middle
-        distance_side1 = distance_between_two_points(center1, center2)
-        distance_side2 = distance_between_two_points(center3, center2)
+        leftLength = distance_between_two_points(center1, center2)
+        rightLength = distance_between_two_points(center3, center2)
 
         print("Distance between the two polygons at the sides from the one in the middle:")
-        print("Side 1:", distance_side1)
-        print("Side 2:", distance_side2)
+        print("- Left side:  ", leftLength)
+        print("- Right side: ", rightLength)
     else:
         raise(ValueError,"The number of found pointer in the image is not equal to 3.")
 
 # VARIABLES AND CONSTANTS ---------------------------------------------------------------------------------------------------------------------------
-path = 'trial/1.ppm'
-numImages = 1
+numImages = 7
 
 # MAIN PROGRAM --------------------------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    for i in range(numImages):
+    for i in range(1,numImages):
+        path = f"trial/{str(i)}.ppm"
         try:
             dataMask = filteringImage(path)
             wireMeasures(dataMask)
