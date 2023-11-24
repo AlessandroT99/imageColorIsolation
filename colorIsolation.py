@@ -5,8 +5,11 @@ import csv
 import cv2
 import math
 import telepot
+import pycuda.autoinit
 import numpy as np
 import matplotlib.pyplot as plt
+import cupy as cp
+import pycuda.driver as cuda
 from skimage.io import imshow, imread
 from scipy.ndimage import label
 from typing import List, Type
@@ -14,6 +17,28 @@ from operator import itemgetter
 from time import sleep
 
 # FUNCTION AND DEFs ---------------------------------------------------------------------------------------------------------------------------------
+def cvtColor_gpu(src, code, dstCn):
+    """
+    cvtColor_gpu()
+    -------------------
+    This functions evaluate the color correction on the GPU.
+    
+    ### INPUTS
+    * `src`: image that you want to analyze.
+    * `code`: type of color coding to use for the conversion.
+    * `dstCn`: number of channel of the output image.
+    ### OUTPUTS
+    * `dst_gpu`: contains the image converted.
+    """
+    # Create the destination image in the proper way
+    dst = np.zeros_like(src, dtype=np.uint8)
+    # Copy the image on the GPU
+    src_gpu = cuda.mem.alloc_managed_array(src)
+    # Convert the color using the GPU
+    dst_gpu = cv2.cuda.cvtColor(src_gpu, code, dstCn)
+    # Get the destination image
+    return dst_gpu.get()
+
 def filteringImage(image_path):
     """
     filteringImage()
@@ -31,8 +56,8 @@ def filteringImage(image_path):
     if SHOW_PLOT:
         printOriginalImage(image_path)
     
-    # Define the extracted image in hsv
-    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # Define the extracted image in hsv with the GPU
+    img_hsv = cvtColor_gpu(img, cv2.COLOR_BGR2HSV, 3)
     
     # Plot results
     if SHOW_PLOT:   
@@ -57,11 +82,18 @@ def filteringImage(image_path):
         fig.tight_layout()
 
     # Found values of the pointer between 20 and 30 for the hsv and over 80 for saturation
-    # Mask creation
-    hue_lower_mask = img_hsv[:,:,0] < 30
-    hue_upper_mask = img_hsv[:,:,0] > 20
-    saturation_mask = img_hsv[:,:,1] > 95 
-    mask = hue_lower_mask*hue_upper_mask*saturation_mask
+    # Mask creation for hue and saturation on GPU
+    hue_lower_mask = np.zeros_like(img_hsv[:,:,0], dtype=np.uint8)
+    hue_upper_mask = np.zeros_like(img_hsv[:,:,0], dtype=np.uint8)
+    saturation_mask = np.zeros_like(img_hsv[:,:,1], dtype=np.uint8)
+    cuda.memcpy_dtoh(hue_lower_mask, img_hsv[:,:,0] < 30)
+    cuda.memcpy_dtoh(hue_upper_mask, img_hsv[:,:,0] > 20)
+    cuda.memcpy_dtoh(saturation_mask, img_hsv[:,:,1] > 95)
+    
+    # Combine the mask into the GPU
+    mask = np.zeros_like(hue_lower_mask, dtype=np.uint8)
+    cuda.elementwise_and(hue_lower_mask, hue_upper_mask, mask)
+    cuda.elementwise_and(mask, saturation_mask, mask)
     # [367-377, 261-274] are the [x,y] values where the soap pointer is
     # [370-397, 294-320] are the [x,y] values to obscure in order to not find the wrong soap point 
     mask[294:320,370:397] = 0
@@ -70,25 +102,23 @@ def filteringImage(image_path):
     mask[0:200,:] = 0
     mask[:,0:100] = 0
     # Mask application
-    red = img[:,:,0]*mask
-    green = img[:,:,1]*mask
-    blue = img[:,:,2]*mask
-    img_masked = np.dstack((red,green,blue))
-    for i in range(len(img_masked[:,0,0])):
-    	for j in range(len(img_masked[0,:,0])):
-    	    for k in range(len(img_masked[0,0,:])):
-                if img_masked[i,j,k] > 0:
-                    img_masked[i,j,k] = 255
-                else:
-                    img_masked[i,j,k] = 0
+    masked_image = np.zeros_like(img, dtype=np.uint8)
+    cuda.elementwise_and(img, mask, masked_image)
+    
     # Show results
     if SHOW_PLOT:
         plt.figure(num=None, figsize=(8, 6), dpi=80)
-        plt.imshow(img_masked)
+        plt.imshow(masked_image)
         plt.show()
+
+    # Convert the 3D image into a 2D image with only 0 and 1
+    # Create a GPU buffer for the masked image
+    masked_image_gpu = cuda.mem.alloc_managed_array(masked_image)
+    # Set the masked image pixels to 255 or 0
+    cuda.elementwise_binary_threshold(masked_image_gpu, masked_image_gpu, 0, 1, cv2.THRESH_BINARY)
+    # Get the masked image from GPU memory
+    dataMatrix = masked_image_gpu.get()
     
-    # Usefull matrix
-    dataMatrix = img_masked[:,:,0]/255
     return dataMatrix
     
 def printOriginalImage(image_path):
@@ -118,19 +148,24 @@ def find_polygon_centers(matrix):
     * `polygons`: contains the polygon centers sorted by x position.
     """
     labeled_matrix, num_labels = label(matrix)
-    
-    lengths = np.empty(num_labels + 1, np.float16)
-    for i in range(1, num_labels + 1):
-        lengths.append(len(np.argwhere(labeled_matrix == i)))
-    sortedLengths = sorted(lengths, reverse=True)
 
-    # Now check only the three bigger polygons
-    polygons =  np.empty(POLYGON_NUMBERS, np.float16)
-    for j in range(1, num_labels + 1):
-        if lengths[j-1] in sortedLengths[:POLYGON_NUMBERS]:
-            polygon = np.argwhere(labeled_matrix == j)
-            center = np.mean(polygon, axis=0, dtype=int)
-            polygons.append(center)
+    # Initialize lengths array on GPU
+    lengths = cp.empty(num_labels + 1, dtype=cp.float16)
+    # Calculate lengths on GPU
+    for i in range(1, num_labels + 1):
+        lengths[i] = cp.sum(labeled_matrix == i)
+
+    # Sort lengths on GPU
+    sortedLengths = cp.sort(lengths, axis=0, kind='mergesort', order='descending')
+    # Select the three biggest polygons
+    polygons = cp.empty(POLYGON_NUMBERS, dtype=cp.float16)
+    # Identify indices of the three biggest polygons
+    indices = sortedLengths[:POLYGON_NUMBERS].argsort()
+    # Extract centers of the three biggest polygons
+    for j in range(POLYGON_NUMBERS):
+        polygon = labeled_matrix[labeled_matrix == indices[j]]
+        center = cp.mean(polygon, axis=0, dtype=int)
+        polygons[j] = center
 
     return sorted(polygons, key=itemgetter(1))
 
@@ -230,9 +265,10 @@ def pixel2cm(px: np.ndarray[np.int16, ndim = 2], axis: str = ""):
     if axis == "":
         if not type(px) is np.ndarray or len(px) > 2 or not type(px[0]) is np.int16:
             raise TypeError("The variable px inserted in pixel2cm() funct is not a length 2 no.array[np.int16] type")
-        cm = []
-        cm.append(px[0].astype(np.float16)/IMAGE_HEIGTH_PX*height_cm)
-        cm.append(px[1].astype(np.float16)/IMAGE_WIDTH_PX*width_cm)
+        # else (not need to specify it)
+        cm = np.empty(2, np.float16)
+        cm[0] = px[0].astype(np.float16)/IMAGE_HEIGTH_PX*height_cm
+        cm[1] = px[1].astype(np.float16)/IMAGE_WIDTH_PX*width_cm
     elif axis.lower() == "x":
         cm = px.astype(np.float16)/IMAGE_WIDTH_PX*width_cm
     elif axis.lower() == "y":
