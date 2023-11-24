@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 
-from array import array
-from re import T
+import os
+import csv
+import cv2
+import math
+import telepot
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.io import imshow, imread
-from skimage.color import rgb2hsv, hsv2rgb
-import cv2
-from time import sleep
 from scipy.ndimage import label
 from typing import List, Type
-import math
 from operator import itemgetter
-import os
+from time import sleep
 
 # FUNCTION AND DEFs ---------------------------------------------------------------------------------------------------------------------------------
 def filteringImage(image_path):
@@ -29,7 +28,8 @@ def filteringImage(image_path):
     """
     img = cv2.imread(image_path)
     # Plot the original image
-    printOriginalImage(image_path)
+    if SHOW_PLOT:
+        printOriginalImage(image_path)
     
     # Define the extracted image in hsv
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -169,6 +169,8 @@ def wireMeasures(matrix):
     * `leftAngle`: The angle of the left part of the wire from the central reference (looking from the frontside).
     * `rightAngle`: The angle of the right part of the wire from the central reference (looking from the frontside).
     """
+    global collectedErrors
+
     # Find polygon centers
     polygon_centers = find_polygon_centers(matrix)
 
@@ -184,10 +186,11 @@ def wireMeasures(matrix):
         leftLength = distance_between_two_points(pixel2cm(centerPointer), pixel2cm(leftPointer))
         rightLength = distance_between_two_points(pixel2cm(rightPointer), pixel2cm(centerPointer))
 
-        print("Distance between the two polygons at the sides from the one in the middle:")
-        print(f"- Left side:  {str(round(leftLength,2))} cm")
-        print(f"- Right side: {str(round(rightLength,2))} cm")
-        print(f"Total Length of the wire: {str(round(leftLength+rightLength,2))} cm")
+        if DEBUG:
+            print("Distance between the two polygons at the sides from the one in the middle:")
+            print(f"- Left side:  {str(round(leftLength,2))} cm")
+            print(f"- Right side: {str(round(rightLength,2))} cm")
+            print(f"Total Length of the wire: {str(round(leftLength+rightLength,2))} cm")
 
         # Evaluate angles
         xL = pixel2cm(centerPointer[1],"x")-pixel2cm(leftPointer[1],"x")
@@ -195,11 +198,20 @@ def wireMeasures(matrix):
         xR = pixel2cm(rightPointer[1],"x")-pixel2cm(centerPointer[1],"x")
         rightAngle = math.acos(xR/rightLength)*180/math.pi
 
-        print("\nAngles of the cables between the horizontal soap plane:")
-        print(f"- Left side:  {str(round(leftAngle,2))} deg")
-        print(f"- Right side: {str(round(rightAngle,2))} deg")
+        if DEBUG:
+            print("\nAngles of the cables between the horizontal soap plane:")
+            print(f"- Left side:  {str(round(leftAngle,2))} deg")
+            print(f"- Right side: {str(round(rightAngle,2))} deg")
+            sleep(0.5)
     else:
-        raise(ValueError,"The number of found pointer in the image is not equal to 3.")
+        if collectedErrors < ADMITTED_ERRORS:
+            collectedErrors += 1
+            leftLength = -1 
+            rightLength = -1 
+            leftAngle = -1 
+            rightAngle = -1
+        else:
+            raise(ValueError,"The number of found pointer in the image is not equal to 3.")
     
     return leftLength, rightLength, leftAngle, rightAngle
     
@@ -263,36 +275,120 @@ IMAGE_WIDTH_PX = 640    # Width of the picture analyzed (equal for all of them)
 IMAGE_HEIGTH_PX = 480   # Height of the picture analyzed (equal for all of them)
 IMAGE_PPI = 72          # PPI resolution of the picture analyzed
 
+WIRE_REAL_LENGTH = 800  # [mm] is the length of the cable in the real world (considering the end of the yellow marker)
+WIRE_IMAGE_LENGTH = 40  # [mm] evaluated from test analysis
+
 SHOW_PLOT = 0           # 0 if no showing images, 1 if showing all images and process
+DEBUG = 0               # 0 if normal functioning, 1 if entering in debug mode and display more details of whats happening during the execution
+ADMITTED_ERRORS = 10    # Number of admitted error in the polygons evaluation
 
 NOT_COUNTED_FILES = 3   # Number of files in the experiment folder to not count (info, data and video files)
 
+# Telegram Bot creation for notification
+userName = xxx
+TOKEN = "xxx"
+bot = telepot.Bot(TOKEN)
+
 # MAIN PROGRAM --------------------------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
+    print("\n")
+    titleName = " HRI soap cutting experiment - Image processing "
+    print(titleName.center(80,"-"))
+    bot.sendMessage(userName, "Image processing for cutting experiment started")
+
+    # Initializations
     numTests = 0
-    dir_path = "../images"
+    dir_path = "../images" # Directory where the data of all test are placed
+
+    # If does not exist reate folder for sub-results of each experiment
+    if not os.path.exists("SingleExperimentData"): 
+       os.makedirs("SingleExperimentData") 
+
+    # Checking folder number
     for path in os.listdir(dir_path):
         # Check if current path is a directory
         if os.path.isdir(os.path.join(dir_path, path)):
             numTests += 1
     # Do the same procedure for all the folders and so for all the tests
-    numTests = 2
+    # Output file creation
+    with open("ImageProcessingOutput",'w',newline='') as outsideFile:
+        outsideWriter = csv.writer(outsideFile)
+        outsideWriter.writerow(["ID","leftLength_mean", "leftLength_std", "rightLength_mean", "rightLength_std", "totalLength_mean", "totalLength_std" \
+                                "leftAngle_mean", "leftAngle_std", "rightAngle_mean", "rightAngle_std"])
+        try:
+            # Elaborate the results for each folder
+            for k in range(1,numTests+1):
+                print(f"\nStarting processing on test {str(k)}...")
+                numImages = filesCounter(k)
 
-    for k in range(1,numTests+1):
-        #numImages = filesCounter(k)
-        numImages = 10
+                leftLengthArray = [] 
+                rightLengthArray = [] 
+                leftAngleArray = [] 
+                rightAngleArray = []
+                totalLengthArray = []
+                collectedErrors = 0
+                # Create single output file
+                with open(f"SingleExperimentData/Test{str(k)}_ImageProcessingData",'w',newline='') as insideFile:
+                    insideWriter = csv.writer(insideFile)
+                    insideWriter.writerow(["leftLength", "rightLength", "totalLength", "leftAngle", "rightAngle"])
+                    for i in range(0,numImages):
+                        path = f"../images/P_{str(k).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
+                        dataMask = filteringImage(path)
 
-        leftLengthArray = [] 
-        rightLengthArray = [] 
-        leftAngleArray = [] 
-        rightAngleArray = []
+                        leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
+                        totalLength = leftLength + rightLength
+                        # An error is been found but is still admitted so its just reported
+                        if leftLength == -1 and rightLength == -1 and leftAngle == -1 and rightAngle == -1:
+                            print("\n[WARNING] An error on marker recognising has been found, but is still admissibile.")
+                            if ADMITTED_ERRORS-collectedErrors > 0:
+                                print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
+                            else: 
+                                print(f"          No more admissible errors remaining.")
+                        else:
+                            # Save data for the average at the end
+                            leftLengthArray.append(leftLength)
+                            rightLengthArray.append(rightLength)
+                            leftAngleArray.append(leftAngle)
+                            rightAngleArray.append(rightAngle)
+                            totalLengthArray.append(totalLength)
+                            # Save data into the single folder output file
+                            insideWriter.writerow([leftLength, rightLength, totalLength, leftAngle, rightAngle])
 
-        for i in range(0,numImages):
-            path = f"../images/P_{str(k).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
-            dataMask = filteringImage(path)
+                        if i == round(numImages/4):
+                            print(f"\n[INFO] Test processing status: 25" + '%' + " completed.")
+                        elif i == round(numImages/2):
+                            print(f"\n[INFO] Test processing status: 50" + '%' + " completed.")
+                        elif i == round(numImages*3/4):
+                            print(f"\n[INFO] Test processing status: 75" + '%' + " completed.")
+                
+                # Save mean data of the just processed test                     
+                outsideWriter.writerow([k,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64), \
+                                        np.mean(rightLengthArray,dtype=np.float64),np.std(rightLengthArray,dtype=np.float64), \
+                                        np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64), \
+                                        np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64), \
+                                        np.mean(rightAngleArray,dtype=np.float64),np.std(rightAngleArray,dtype=np.float64)])
+                print("\n[INFO] Done.")
 
-            leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
-            leftLengthArray.append(leftLength)
-            rightLengthArray.append(rightLength)
-            leftAngleArray.append(leftAngle)
-            rightAngleArray.append(rightAngle)
+                if i == round(numTests/4):
+                    text = "[INFO] Analysis processing status: 25" + '%' + " completed."
+                    print("\n" + text)
+                    bot.sendMessage(userName, text)
+                elif i == round(numTests/2):
+                    text = "\n[INFO] Analysis processing status: 50" + '%' + " completed."
+                    print("\n" + text)
+                    bot.sendMessage(userName, text)
+                elif i == round(numTests*3/4):
+                    text = "\n[INFO] Analysis processing status: 75" + '%' + " completed." 
+                    print("\n" + text)
+                    bot.sendMessage(userName, text)
+            
+        except Exception as err:
+            print("\n[ERROR]: " + err)
+            bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction")
+            exit()
+
+        print("\nImage processing over.\n")
+        titleName = " by Alessandro Tiozzo - alessandro.tiozzo@iit.it "
+        print(titleName.center(80,"-"))
+        print("\n")
+        bot.sendMessage(userName, "Execution completed! Come to see results")
