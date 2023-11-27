@@ -169,7 +169,7 @@ def find_polygon_centers(matrix):
 
     return sorted(polygons, key=itemgetter(1))
 
-def distance_between_two_points(point1: np.ndarray[np.float16, ndim=2], point2: np.ndarray[np.float16, ndim=2]) -> np.float16:
+def distance_between_two_points(point1: np.ndarray, point2: np.ndarray) -> np.float16:
     """
     distance_between_two_points()
     -------------------
@@ -248,7 +248,7 @@ def wireMeasures(matrix):
     
     return leftLength, rightLength, leftAngle, rightAngle
     
-def pixel2cm(px: np.ndarray[np.int16, ndim = 2], axis: str = ""):
+def pixel2cm(px: np.ndarray, axis: str = ""):
     """
     pixel2cm()
     -------------------
