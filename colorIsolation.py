@@ -119,22 +119,22 @@ def find_polygon_centers(matrix):
     """
     labeled_matrix, num_labels = label(matrix)
     
-    lengths = np.empty(num_labels + 1, np.float16)
+    lengths = []
     for i in range(1, num_labels + 1):
         lengths.append(len(np.argwhere(labeled_matrix == i)))
     sortedLengths = sorted(lengths, reverse=True)
 
     # Now check only the three bigger polygons
-    polygons =  np.empty(POLYGON_NUMBERS, np.float16)
+    polygons = []
     for j in range(1, num_labels + 1):
-        if lengths[j-1] in sortedLengths[:POLYGON_NUMBERS]:
+        if lengths[j-1] in sortedLengths[:3]:
             polygon = np.argwhere(labeled_matrix == j)
             center = np.mean(polygon, axis=0, dtype=int)
             polygons.append(center)
 
     return sorted(polygons, key=itemgetter(1))
 
-def distance_between_two_points(point1: np.ndarray[np.float16, ndim=2], point2: np.ndarray[np.float16, ndim=2]) -> np.float16:
+def distance_between_two_points(point1: List[float], point2: List[float]) -> float:
     """
     distance_between_two_points()
     -------------------
@@ -146,11 +146,10 @@ def distance_between_two_points(point1: np.ndarray[np.float16, ndim=2], point2: 
     ### OUTPUTS
     * `distance`: Distance between the two points.
     """
-    if not type(point1) is list or len(point1) != 2 or not type(point1[0]) is float or not type(point2) is list or len(point2) != 2 or not type(point2[0]) is float:
-        if not type(point1) is list or len(point1) != 2 or not type(point1[0]) is float:
-            raise TypeError("The variable point1 inserted in distance_between_two_points() funct is not a length 2 List[float] type")
-        elif not type(point2) is list or len(point2) != 2 or not type(point2[0]) is float:
-            raise TypeError("The variable point2 inserted in distance_between_two_points() funct is not a length 2 List[float] type")
+    if not type(point1) is list or len(point1) != 2 or not type(point1[0]) is float:
+        raise TypeError("The variable point1 inserted in distance_between_two_points() funct is not a length 2 List[float] type")
+    elif not type(point2) is list or len(point2) != 2 or not type(point2[0]) is float:
+        raise TypeError("The variable point2 inserted in distance_between_two_points() funct is not a length 2 List[float] type")
 
     distance_xy = [a-b for a,b in zip(point1,point2)]
     distance = np.linalg.norm(distance_xy,2)
@@ -178,6 +177,9 @@ def wireMeasures(matrix):
     # Assume there are three polygons
     if len(polygon_centers) == 3:
         leftPointer, centerPointer, rightPointer = polygon_centers
+        #print("Pointer left: ",leftPointer)
+        #print("Pointer right: ",rightPointer)
+        #print("Pointer center: ",centerPointer)
 
         # Convert pixels into cm before evaluating distances
         # Evaluate distance between the two polygons at the sides from the one in the middle
@@ -202,18 +204,18 @@ def wireMeasures(matrix):
             print(f"- Right side: {str(round(rightAngle,2))} deg")
             sleep(0.5)
     else:
-        if collectedErrors > ADMITTED_ERRORS:
+        if collectedErrors < ADMITTED_ERRORS:
+            collectedErrors += 1
+            leftLength = -1 
+            rightLength = -1 
+            leftAngle = -1 
+            rightAngle = -1
+        else:
             raise(ValueError,"The number of found pointer in the image is not equal to 3.")
-        # else (not necessary)
-        collectedErrors += 1
-        leftLength = -1 
-        rightLength = -1 
-        leftAngle = -1 
-        rightAngle = -1
     
     return leftLength, rightLength, leftAngle, rightAngle
     
-def pixel2cm(px: np.ndarray[np.int16, ndim = 2], axis: str = ""):
+def pixel2cm(px: List[int], axis: str = ""):
     """
     pixel2cm()
     -------------------
@@ -228,18 +230,19 @@ def pixel2cm(px: np.ndarray[np.int16, ndim = 2], axis: str = ""):
     height_cm = IMAGE_HEIGTH_PX/IMAGE_PPI
     width_cm = IMAGE_WIDTH_PX/IMAGE_PPI
     if axis == "":
-        if not type(px) is np.ndarray or len(px) > 2 or not type(px[0]) is np.int16:
-            raise TypeError("The variable px inserted in pixel2cm() funct is not a length 2 no.array[np.int16] type")
+        if not type(px) is np.ndarray or len(px) > 2 or not type(px[0]) is np.int64:
+            raise TypeError("The variable px inserted in pixel2cm() funct is not a length 2 list[int] type")
         cm = []
-        cm.append(px[0].astype(np.float16)/IMAGE_HEIGTH_PX*height_cm)
-        cm.append(px[1].astype(np.float16)/IMAGE_WIDTH_PX*width_cm)
+        cm.append(float(px[0])/IMAGE_HEIGTH_PX*height_cm)
+        cm.append(float(px[1])/IMAGE_WIDTH_PX*width_cm)
     elif axis.lower() == "x":
-        cm = px.astype(np.float16)/IMAGE_WIDTH_PX*width_cm
+        cm = float(px)/IMAGE_WIDTH_PX*width_cm
     elif axis.lower() == "y":
-        cm = px.astype(np.float16)/IMAGE_HEIGTH_PX*height_cm
+        cm = float(px)/IMAGE_HEIGTH_PX*height_cm
     else:
         raise TypeError("The character inserted for axis variable as not being recognised in pixel2cm()")
     
+    #print(cm)
     return cm
 
 def filesCounter(folderNumber: int) -> int:
@@ -261,9 +264,10 @@ def filesCounter(folderNumber: int) -> int:
     count = 0
     # Iterate directory
     for path in os.listdir(dir_path):
-        # Check if current path is a file
+        # check if current path is a file
         if os.path.isfile(os.path.join(dir_path, path)):
             count += 1
+    #print('File count:', count)
     return count-NOT_COUNTED_FILES
 
 # VARIABLES AND CONSTANTS ---------------------------------------------------------------------------------------------------------------------------
@@ -277,14 +281,12 @@ WIRE_IMAGE_LENGTH = 40  # [mm] evaluated from test analysis
 SHOW_PLOT = 0           # 0 if no showing images, 1 if showing all images and process
 DEBUG = 0               # 0 if normal functioning, 1 if entering in debug mode and display more details of whats happening during the execution
 ADMITTED_ERRORS = 10    # Number of admitted error in the polygons evaluation
-POLYGON_NUMBERS = 3     # Number of polygons needed for each image
-EMPTY_VALUE = 1000      # Number identifying that the array cell is empty
 
 NOT_COUNTED_FILES = 3   # Number of files in the experiment folder to not count (info, data and video files)
 
 # Telegram Bot creation for notification
-userName = xxx
-TOKEN = "xxx"
+userName = 486322403
+TOKEN = "5359903695:AAEVr-HqTxjIMSFIChgmwq-9RiWuMuiwFtQ"
 bot = telepot.Bot(TOKEN)
 
 # MAIN PROGRAM --------------------------------------------------------------------------------------------------------------------------------------
@@ -318,11 +320,12 @@ if __name__ == "__main__":
             for k in range(1,numTests+1):
                 print(f"\nStarting processing on test {str(k)}...")
                 numImages = filesCounter(k)
-                leftLengthArray = np.empty(numImages, np.float16)
-                rightLengthArray = np.empty(numImages, np.float16)
-                leftAngleArray = np.empty(numImages, np.float16)
-                rightAngleArray = np.empty(numImages, np.float16)
-                totalLengthArray = np.empty(numImages, np.float16)
+
+                leftLengthArray = [] 
+                rightLengthArray = [] 
+                leftAngleArray = [] 
+                rightAngleArray = []
+                totalLengthArray = []
                 collectedErrors = 0
                 # Create single output file
                 with open(f"SingleExperimentData/Test{str(k)}_ImageProcessingData",'w',newline='') as insideFile:
@@ -341,19 +344,13 @@ if __name__ == "__main__":
                                 print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
                             else: 
                                 print(f"          No more admissible errors remaining.")
-
-                            leftLengthArray[i] = EMPTY_VALUE
-                            rightLengthArray[i] = EMPTY_VALUE
-                            leftAngleArray[i] = EMPTY_VALUE
-                            rightAngleArray[i] = EMPTY_VALUE
-                            totalLengthArray[i] = EMPTY_VALUE
                         else:
                             # Save data for the average at the end
-                            leftLengthArray[i] = (leftLength)
-                            rightLengthArray[i] = (rightLength)
-                            leftAngleArray[i] = (leftAngle)
-                            rightAngleArray[i] = (rightAngle)
-                            totalLengthArray[i] = (totalLength)
+                            leftLengthArray.append(leftLength)
+                            rightLengthArray.append(rightLength)
+                            leftAngleArray.append(leftAngle)
+                            rightAngleArray.append(rightAngle)
+                            totalLengthArray.append(totalLength)
                             # Save data into the single folder output file
                             insideWriter.writerow([leftLength, rightLength, totalLength, leftAngle, rightAngle])
 
@@ -364,18 +361,12 @@ if __name__ == "__main__":
                         elif i == round(numImages*3/4):
                             print(f"\n[INFO] Test processing status: 75" + '%' + " completed.")
                 
-                # Remove the empty values from the arrays
-                leftLengthArray = np.delete(leftLengthArray, np.where(leftLengthArray == EMPTY_VALUE))
-                rightLengthArray = np.delete(rightLengthArray, np.where(rightLengthArray == EMPTY_VALUE))
-                leftAngleArray = np.delete(leftAngleArray, np.where(leftAngleArray == EMPTY_VALUE))
-                rightAngleArray = np.delete(rightAngleArray, np.where(rightAngleArray == EMPTY_VALUE))
-                totalLengthArray = np.delete(totalLengthArray, np.where(totalLengthArray == EMPTY_VALUE))
                 # Save mean data of the just processed test                     
-                outsideWriter.writerow([k,np.mean(leftLengthArray,dtype=np.float16),np.std(leftLengthArray,dtype=np.float16), \
-                                        np.mean(rightLengthArray,dtype=np.float16),np.std(rightLengthArray,dtype=np.float16), \
-                                        np.mean(totalLengthArray,dtype=np.float16),np.std(totalLengthArray,dtype=np.float16), \
-                                        np.mean(leftAngleArray,dtype=np.float16),np.std(leftAngleArray,dtype=np.float16), \
-                                        np.mean(rightAngleArray,dtype=np.float16),np.std(rightAngleArray,dtype=np.float16)])
+                outsideWriter.writerow([k,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64), \
+                                        np.mean(rightLengthArray,dtype=np.float64),np.std(rightLengthArray,dtype=np.float64), \
+                                        np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64), \
+                                        np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64), \
+                                        np.mean(rightAngleArray,dtype=np.float64),np.std(rightAngleArray,dtype=np.float64)])
                 print("\n[INFO] Done.")
 
                 if i == round(numTests/4):
@@ -391,6 +382,8 @@ if __name__ == "__main__":
                     print("\n" + text)
                     bot.sendMessage(userName, text)
             
+                k = numTests+1
+
         except Exception as err:
             print("\n[ERROR]: " + err)
             bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction")
