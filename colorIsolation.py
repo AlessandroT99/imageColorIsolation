@@ -169,7 +169,7 @@ def wireMeasures(matrix):
     * `leftAngle`: The angle of the left part of the wire from the central reference (looking from the frontside).
     * `rightAngle`: The angle of the right part of the wire from the central reference (looking from the frontside).
     """
-    global collectedErrors
+    global collectedErrors, bot
 
     # Find polygon centers
     polygon_centers = find_polygon_centers(matrix)
@@ -211,6 +211,7 @@ def wireMeasures(matrix):
             leftAngle = -1 
             rightAngle = -1
         else:
+            bot.sendMessage(userName, "[ERROR] The admissible number error of not found pointers has been overpass.")  
             raise(ValueError,"The number of found pointer in the image is not equal to 3.")
     
     return leftLength, rightLength, leftAngle, rightAngle
@@ -280,13 +281,13 @@ WIRE_IMAGE_LENGTH = 40  # [mm] evaluated from test analysis
 
 SHOW_PLOT = 0           # 0 if no showing images, 1 if showing all images and process
 DEBUG = 0               # 0 if normal functioning, 1 if entering in debug mode and display more details of whats happening during the execution
-ADMITTED_ERRORS = 10    # Number of admitted error in the polygons evaluation
+ADMITTED_ERRORS = 50    # Number of admitted error in the polygons evaluation
 
 NOT_COUNTED_FILES = 3   # Number of files in the experiment folder to not count (info, data and video files)
 
 # Telegram Bot creation for notification
-userName = 486322403
-TOKEN = "5359903695:AAEVr-HqTxjIMSFIChgmwq-9RiWuMuiwFtQ"
+userName = xxx
+TOKEN = "xxx"
 bot = telepot.Bot(TOKEN)
 
 # MAIN PROGRAM --------------------------------------------------------------------------------------------------------------------------------------
@@ -335,7 +336,12 @@ if __name__ == "__main__":
                         path = f"../images/P_{str(k).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
                         dataMask = filteringImage(path)
 
-                        leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
+                        try:
+                            leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
+                        except ValueError as verr:
+                            print("\n[ERROR]: " + str(verr))
+                            bot.sendMessage(userName, "[ERROR] Error found, limit of {str(ADMITTED_ERRORS)} admissible errors overpassed. \nStopping execution for the current dataset.")
+
                         totalLength = leftLength + rightLength
                         # An error is been found but is still admitted so its just reported
                         if leftLength == -1 and rightLength == -1 and leftAngle == -1 and rightAngle == -1:
@@ -355,11 +361,17 @@ if __name__ == "__main__":
                             insideWriter.writerow([leftLength, rightLength, totalLength, leftAngle, rightAngle])
 
                         if i == round(numImages/4):
-                            print(f"\n[INFO] Test processing status: 25" + '%' + " completed.")
+                            text = "[INFO] Test processing status: 25" + '%' + " completed."
+                            print("\n" + text)
+                            bot.sendMessage(userName, text)
                         elif i == round(numImages/2):
-                            print(f"\n[INFO] Test processing status: 50" + '%' + " completed.")
+                            text = "[INFO] Test processing status: 50" + '%' + " completed."
+                            print("\n" + text)
+                            bot.sendMessage(userName, text)
                         elif i == round(numImages*3/4):
-                            print(f"\n[INFO] Test processing status: 75" + '%' + " completed.")
+                            text = "[INFO] Test processing status: 75" + '%' + " completed."
+                            print("\n" + text)
+                            bot.sendMessage(userName, text)
                 
                 # Save mean data of the just processed test                     
                 outsideWriter.writerow([k,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64), \
@@ -367,6 +379,7 @@ if __name__ == "__main__":
                                         np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64), \
                                         np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64), \
                                         np.mean(rightAngleArray,dtype=np.float64),np.std(rightAngleArray,dtype=np.float64)])
+                bot.sendMessage(userName, f"[INFO] Processing of dataset {str(k)} is done. Has been found {str(collectedErrors)} admissible errors.")
                 print("\n[INFO] Done.")
 
                 if i == round(numTests/4):
@@ -383,10 +396,9 @@ if __name__ == "__main__":
                     bot.sendMessage(userName, text)
             
                 k = numTests+1
-
         except Exception as err:
-            print("\n[ERROR]: " + err)
-            bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction")
+            print("\n[ERROR]: " + str(err))
+            bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction.")
             exit()
 
         print("\nImage processing over.\n")
