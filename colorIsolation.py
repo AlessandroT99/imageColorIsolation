@@ -4,7 +4,7 @@ import os
 import csv
 import cv2
 import math
-import telepot
+import telepot 
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.io import imshow, imread
@@ -14,7 +14,7 @@ from operator import itemgetter
 from time import sleep
 
 # FUNCTION AND DEFs ---------------------------------------------------------------------------------------------------------------------------------
-def filteringImage(image_path):
+def filteringImage(image_path, subjectNumber, imageNumber):
     """
     filteringImage()
     -------------------
@@ -26,6 +26,7 @@ def filteringImage(image_path):
     ### OUTPUTS
     * `dataMatrix`: contains the mask of the image in 2D.
     """
+
     img = cv2.imread(image_path)
     # Plot the original image
     if SHOW_PLOT:
@@ -55,41 +56,37 @@ def filteringImage(image_path):
         ax[2].axis('off')
         
         fig.tight_layout()
+        plt.show()
 
     # Found values of the pointer between 20 and 30 for the hsv and over 80 for saturation
     # Mask creation
     hue_lower_mask = img_hsv[:,:,0] < 30
     hue_upper_mask = img_hsv[:,:,0] > 20
-    saturation_mask = img_hsv[:,:,1] > 95 
-    mask = hue_lower_mask*hue_upper_mask*saturation_mask
+    saturation_mask = img_hsv[:,:,1] > 95
+    # Create a mask for the specified color range
+    mask = hue_lower_mask*saturation_mask*hue_upper_mask
+
     # [367-377, 261-274] are the [x,y] values where the soap pointer is
     # [370-397, 294-320] are the [x,y] values to obscure in order to not find the wrong soap point 
-    mask[294:320,370:397] = 0
-    mask[261:274,367:377] = 1
-    # Mask the part not analyzed 
-    mask[0:200,:] = 0
-    mask[:,0:100] = 0
-    # Mask application
-    red = img[:,:,0]*mask
-    green = img[:,:,1]*mask
-    blue = img[:,:,2]*mask
-    img_masked = np.dstack((red,green,blue))
-    for i in range(len(img_masked[:,0,0])):
-    	for j in range(len(img_masked[0,:,0])):
-    	    for k in range(len(img_masked[0,0,:])):
-                if img_masked[i,j,k] > 0:
-                    img_masked[i,j,k] = 255
-                else:
-                    img_masked[i,j,k] = 0
+    mask[soapLimits[subjectNumber,0]:soapLimits[subjectNumber,1],soapLimits[subjectNumber,2]:soapLimits[subjectNumber,3]] = 0
+    mask[soapLimits[subjectNumber,4]:soapLimits[subjectNumber,5],soapLimits[subjectNumber,6]:soapLimits[subjectNumber,7]] = 1
+
     # Show results
-    if SHOW_PLOT:
+    if SHOW_PLOT | imageNumber == 0:
+        # Apply the mask to the original image
+        reverseMask = -(mask-1)
+        red = img[:,:,0]*reverseMask
+        green = img[:,:,1]*reverseMask
+        blue = img[:,:,2]*reverseMask
+        img_masked = np.dstack((red,green,blue))
         plt.figure(num=None, figsize=(8, 6), dpi=80)
         plt.imshow(img_masked)
-        plt.show()
+        plt.show(block=False)
+        plt.pause(3)
+        plt.close()
     
     # Usefull matrix
-    dataMatrix = img_masked[:,:,0]/255
-    return dataMatrix
+    return mask
     
 def printOriginalImage(image_path):
     """
@@ -211,7 +208,8 @@ def wireMeasures(matrix):
             leftAngle = -1 
             rightAngle = -1
         else:
-            bot.sendMessage(userName, "[ERROR] The admissible number error of not found pointers has been overpass.")  
+            if TELEGRAM_LOG:
+                bot.sendMessage(userName, "[ERROR] The admissible number error of not found pointers has been overpass.")  
             raise(ValueError,"The number of found pointer in the image is not equal to 3.")
     
     return leftLength, rightLength, leftAngle, rightAngle
@@ -285,9 +283,28 @@ ADMITTED_ERRORS = 50    # Number of admitted error in the polygons evaluation
 
 NOT_COUNTED_FILES = 3   # Number of files in the experiment folder to not count (info, data and video files)
 
+TELEGRAM_LOG = 1        # 0 if the log is not reported
+
+soapLimits = np.array([[294,320,370,397,261,274,367,377],[295,320,355,380,260,280,350,370],
+                       [295,320,360,385,260,280,360,375],[295,315,245,270,255,273,258,275],
+                       [298,318,360,385,260,278,357,374],[295,315,245,265,260,278,260,275],
+                       [0,0,0,0,0,0,0,0],[295,316,248,270,255,275,262,280],
+                       [295,318,247,273,258,275,263,278],[295,318,250,272,259,277,261,280],
+                       [295,318,250,270,258,275,261,278],[300,320,362,386,268,284,357,371],
+                       [0,0,0,0,0,0,0,0],[300,320,365,386,262,278,359,372],
+                       [300,320,365,385,263,280,355,370],[300,320,365,385,263,280,354,370],
+                       [321,342,370,392,283,298,361,378],[0,0,0,0,0,0,0,0],
+                       [320,340,270,290,284,300,287,300],[0,0,0,0,0,0,0,0],
+                       [323,343,256,276,288,305,271,286],[323,346,255,275,286,303,270,285],
+                       [280,300,264,285,240,255,275,289],[275,300,264,286,241,257,277,293],
+                       [280,300,264,286,244,260,276,291],[0,0,0,0,0,0,0,0],
+                       [270,290,280,300,241,260,284,296],[281,303,358,380,244,261,352,364],
+                       [282,303,361,384,244,260,357,371],[281,303,363,385,243,260,358,371],
+                       [282,303,363,385,244,260,359,371],[282,303,371,393,245,261,366,379]])
+
 # Telegram Bot creation for notification
-userName = xxx
-TOKEN = "xxx"
+userName = 486322403
+TOKEN = "5359903695:AAEVr-HqTxjIMSFIChgmwq-9RiWuMuiwFtQ"
 bot = telepot.Bot(TOKEN)
 
 # MAIN PROGRAM --------------------------------------------------------------------------------------------------------------------------------------
@@ -295,7 +312,8 @@ if __name__ == "__main__":
     print("\n")
     titleName = " HRI soap cutting experiment - Image processing "
     print(titleName.center(80,"-"))
-    bot.sendMessage(userName, "Image processing for cutting experiment started")
+    if TELEGRAM_LOG:
+        bot.sendMessage(userName, "Image processing for cutting experiment started")
 
     # Initializations
     numTests = 0
@@ -310,18 +328,45 @@ if __name__ == "__main__":
         # Check if current path is a directory
         if os.path.isdir(os.path.join(dir_path, path)):
             numTests += 1
+    errorInput = 1
+    while errorInput == 1:
+        errorInput = 0
+        firstTest = int(input(f"\nThere are {str(numTests)} available, from which do you want to start? [1:32]: "))
+        if firstTest < 1 or firstTest > numTests:
+            errorInput = 1
+            print(f"\nNope, you ask something impossible, retry.\n")
+        else:
+            lastTest = int(input(f"Ok, starting from {str(firstTest)}, and at which do you want to end? [1:32]: "))
+            if lastTest < 1 or lastTest > numTests:
+                errorInput = 1
+                print(f"\nNope, you ask something impossible, retry.\n")
+        
     # Do the same procedure for all the folders and so for all the tests
     # Output file creation
-    with open("ImageProcessingOutput",'w',newline='') as outsideFile:
+    with open(f"ImageProcessingOutput_{str(firstTest)}-{str(lastTest)}",'w',newline='') as outsideFile:
         outsideWriter = csv.writer(outsideFile)
         outsideWriter.writerow(["ID","leftLength_mean", "leftLength_std", "rightLength_mean", "rightLength_std", "totalLength_mean", "totalLength_std" \
                                 "leftAngle_mean", "leftAngle_std", "rightAngle_mean", "rightAngle_std"])
         try:
             # Elaborate the results for each folder
-            for k in range(1,numTests+1):
-                print(f"\nStarting processing on test {str(k)}...")
-                numImages = filesCounter(k)
+            cnt = firstTest
+            while cnt < lastTest+1:
+                # Avoid test with no data or discarded
+                if cnt in [7,13,18,20,26]:
+                    toPrint = f"[DISCARD] Test {str(cnt)} discarded."
+                    print("\n" + toPrint)
+                    if TELEGRAM_LOG:
+                        bot.sendMessage(userName, toPrint)
+                    cnt += 1
+                    if cnt > numTests+1:
+                        break
 
+                toPrint = f"[START] Starting processing on test {str(cnt)}..."
+                print("\n" + toPrint)
+                if TELEGRAM_LOG:
+                    bot.sendMessage(userName, toPrint)
+                numImages = filesCounter(cnt)
+                
                 leftLengthArray = [] 
                 rightLengthArray = [] 
                 leftAngleArray = [] 
@@ -329,18 +374,22 @@ if __name__ == "__main__":
                 totalLengthArray = []
                 collectedErrors = 0
                 # Create single output file
-                with open(f"SingleExperimentData/Test{str(k)}_ImageProcessingData",'w',newline='') as insideFile:
+                with open(f"SingleExperimentData/Test{str(cnt)}_ImageProcessingData",'w',newline='') as insideFile:
                     insideWriter = csv.writer(insideFile)
                     insideWriter.writerow(["leftLength", "rightLength", "totalLength", "leftAngle", "rightAngle"])
-                    for i in range(0,numImages):
-                        path = f"../images/P_{str(k).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
-                        dataMask = filteringImage(path)
+                    i = 0
+                    while i < numImages:
+                        path = f"../images/P_{str(cnt).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
+                        dataMask = filteringImage(path,cnt-1,i)
 
                         try:
                             leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
                         except ValueError as verr:
-                            print("\n[ERROR]: " + str(verr))
-                            bot.sendMessage(userName, "[ERROR] Error found, limit of {str(ADMITTED_ERRORS)} admissible errors overpassed. \nStopping execution for the current dataset.")
+                            toPrint = f"[ERROR] Error found, limit of {str(ADMITTED_ERRORS)} admissible errors overpassed. \nStopping execution for the current dataset (N. {str(cnt)})."
+                            print("\n" + toPrint)
+                            if TELEGRAM_LOG:
+                                bot.sendMessage(userName, toPrint)
+                                break
 
                         totalLength = leftLength + rightLength
                         # An error is been found but is still admitted so its just reported
@@ -363,46 +412,58 @@ if __name__ == "__main__":
                         if i == round(numImages/4):
                             text = "[INFO] Test processing status: 25" + '%' + " completed."
                             print("\n" + text)
-                            bot.sendMessage(userName, text)
+                            #if TELEGRAM_LOG:
+                            #    bot.sendMessage(userName, text)
                         elif i == round(numImages/2):
                             text = "[INFO] Test processing status: 50" + '%' + " completed."
                             print("\n" + text)
-                            bot.sendMessage(userName, text)
+                            if TELEGRAM_LOG:
+                                bot.sendMessage(userName, text)
                         elif i == round(numImages*3/4):
                             text = "[INFO] Test processing status: 75" + '%' + " completed."
                             print("\n" + text)
-                            bot.sendMessage(userName, text)
+                            #if TELEGRAM_LOG:
+                            #    bot.sendMessage(userName, text)
+                        
+                        i += 1
                 
                 # Save mean data of the just processed test                     
-                outsideWriter.writerow([k,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64), \
-                                        np.mean(rightLengthArray,dtype=np.float64),np.std(rightLengthArray,dtype=np.float64), \
-                                        np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64), \
-                                        np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64), \
+                outsideWriter.writerow([cnt,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64),
+                                        np.mean(rightLengthArray,dtype=np.float64),np.std(rightLengthArray,dtype=np.float64),
+                                        np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64),
+                                        np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64),
                                         np.mean(rightAngleArray,dtype=np.float64),np.std(rightAngleArray,dtype=np.float64)])
-                bot.sendMessage(userName, f"[INFO] Processing of dataset {str(k)} is done. Has been found {str(collectedErrors)} admissible errors.")
-                print("\n[INFO] Done.")
+                if TELEGRAM_LOG:
+                    bot.sendMessage(userName, f"[INFO] Processing of dataset {str(cnt)} is done. Has been found {str(collectedErrors)} admissible errors.")
+                print("\n[END] Done.")
 
                 if i == round(numTests/4):
                     text = "[INFO] Analysis processing status: 25" + '%' + " completed."
                     print("\n" + text)
-                    bot.sendMessage(userName, text)
+                    if TELEGRAM_LOG:
+                        bot.sendMessage(userName, text)
                 elif i == round(numTests/2):
                     text = "\n[INFO] Analysis processing status: 50" + '%' + " completed."
                     print("\n" + text)
-                    bot.sendMessage(userName, text)
+                    if TELEGRAM_LOG:
+                        bot.sendMessage(userName, text)
                 elif i == round(numTests*3/4):
                     text = "\n[INFO] Analysis processing status: 75" + '%' + " completed." 
                     print("\n" + text)
-                    bot.sendMessage(userName, text)
-            
-                k = numTests+1
+                    if TELEGRAM_LOG:
+                        bot.sendMessage(userName, text)
+
+                cnt += 1
+                
         except Exception as err:
             print("\n[ERROR]: " + str(err))
-            bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction.")
+            if TELEGRAM_LOG:
+                bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction.")
             exit()
 
-        print("\nImage processing over.\n")
+        print("\n[INFO] Image processing over.\n")
         titleName = " by Alessandro Tiozzo - alessandro.tiozzo@iit.it "
         print(titleName.center(80,"-"))
         print("\n")
-        bot.sendMessage(userName, "Execution completed! Come to see results")
+        if TELEGRAM_LOG:
+            bot.sendMessage(userName, "[INFO] Execution completed! Come to see results")
