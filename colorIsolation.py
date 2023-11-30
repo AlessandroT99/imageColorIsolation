@@ -170,7 +170,7 @@ def wireMeasures(matrix):
 
     # Find polygon centers
     polygon_centers = find_polygon_centers(matrix)
-
+    
     # Assume there are three polygons
     if len(polygon_centers) == 3:
         leftPointer, centerPointer, rightPointer = polygon_centers
@@ -207,10 +207,8 @@ def wireMeasures(matrix):
             rightLength = -1 
             leftAngle = -1 
             rightAngle = -1
-        else:
-            if TELEGRAM_LOG:
-                bot.sendMessage(userName, "[ERROR] The admissible number error of not found pointers has been overpass.")  
-            raise(ValueError,"The number of found pointer in the image is not equal to 3.")
+        else: 
+            raise ValueError("The number of found pointer in the image is not equal to 3.")
     
     return leftLength, rightLength, leftAngle, rightAngle
     
@@ -379,53 +377,54 @@ if __name__ == "__main__":
                     insideWriter.writerow(["leftLength", "rightLength", "totalLength", "leftAngle", "rightAngle"])
                     i = 0
                     while i < numImages:
-                        path = f"../images/P_{str(cnt).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
-                        dataMask = filteringImage(path,cnt-1,i)
-
                         try:
+                            path = f"../images/P_{str(cnt).rjust(5,'0')}/{str(i).rjust(8,'0')}.ppm"
+                            dataMask = filteringImage(path,cnt-1,i)
+
                             leftLength, rightLength, leftAngle, rightAngle = wireMeasures(dataMask)
-                        except ValueError as verr:
+
+                            totalLength = leftLength + rightLength
+                            # An error is been found but is still admitted so its just reported
+                            if leftLength == -1 and rightLength == -1 and leftAngle == -1 and rightAngle == -1:
+                                print("\n[WARNING] An error on marker recognising has been found, but is still admissibile.")
+                                if ADMITTED_ERRORS-collectedErrors > 0:
+                                    print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
+                                else: 
+                                    print(f"          No more admissible errors remaining.")
+                            else:
+                                # Save data for the average at the end
+                                leftLengthArray.append(leftLength)
+                                rightLengthArray.append(rightLength)
+                                leftAngleArray.append(leftAngle)
+                                rightAngleArray.append(rightAngle)
+                                totalLengthArray.append(totalLength)
+                                # Save data into the single folder output file
+                                insideWriter.writerow([leftLength, rightLength, totalLength, leftAngle, rightAngle])
+
+                            if i == round(numImages/4):
+                                text = "[INFO] Test processing status: 25" + '%' + " completed."
+                                print("\n" + text)
+                                #if TELEGRAM_LOG:
+                                #    bot.sendMessage(userName, text)
+                            elif i == round(numImages/2):
+                                text = "[INFO] Test processing status: 50" + '%' + " completed."
+                                print("\n" + text)
+                                if TELEGRAM_LOG:
+                                    bot.sendMessage(userName, text)
+                            elif i == round(numImages*3/4):
+                                text = "[INFO] Test processing status: 75" + '%' + " completed."
+                                print("\n" + text)
+                                #if TELEGRAM_LOG:
+                                #    bot.sendMessage(userName, text)
+                            
+                            i += 1
+                    
+                        except ValueError:
                             toPrint = f"[ERROR] Error found, limit of {str(ADMITTED_ERRORS)} admissible errors overpassed. \nStopping execution for the current dataset (N. {str(cnt)})."
                             print("\n" + toPrint)
                             if TELEGRAM_LOG:
                                 bot.sendMessage(userName, toPrint)
                                 break
-
-                        totalLength = leftLength + rightLength
-                        # An error is been found but is still admitted so its just reported
-                        if leftLength == -1 and rightLength == -1 and leftAngle == -1 and rightAngle == -1:
-                            print("\n[WARNING] An error on marker recognising has been found, but is still admissibile.")
-                            if ADMITTED_ERRORS-collectedErrors > 0:
-                                print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
-                            else: 
-                                print(f"          No more admissible errors remaining.")
-                        else:
-                            # Save data for the average at the end
-                            leftLengthArray.append(leftLength)
-                            rightLengthArray.append(rightLength)
-                            leftAngleArray.append(leftAngle)
-                            rightAngleArray.append(rightAngle)
-                            totalLengthArray.append(totalLength)
-                            # Save data into the single folder output file
-                            insideWriter.writerow([leftLength, rightLength, totalLength, leftAngle, rightAngle])
-
-                        if i == round(numImages/4):
-                            text = "[INFO] Test processing status: 25" + '%' + " completed."
-                            print("\n" + text)
-                            #if TELEGRAM_LOG:
-                            #    bot.sendMessage(userName, text)
-                        elif i == round(numImages/2):
-                            text = "[INFO] Test processing status: 50" + '%' + " completed."
-                            print("\n" + text)
-                            if TELEGRAM_LOG:
-                                bot.sendMessage(userName, text)
-                        elif i == round(numImages*3/4):
-                            text = "[INFO] Test processing status: 75" + '%' + " completed."
-                            print("\n" + text)
-                            #if TELEGRAM_LOG:
-                            #    bot.sendMessage(userName, text)
-                        
-                        i += 1
                 
                 # Save mean data of the just processed test                     
                 outsideWriter.writerow([cnt,np.mean(leftLengthArray,dtype=np.float64),np.std(leftLengthArray,dtype=np.float64),
@@ -454,11 +453,12 @@ if __name__ == "__main__":
                         bot.sendMessage(userName, text)
 
                 cnt += 1
-                
-        except Exception as err:
-            print("\n[ERROR]: " + str(err))
+
+        except:
+            toPrint = "[FATAL ERROR] An error has been founded, stopping execution. Waiting for correction."
+            print("\n" + toPrint)
             if TELEGRAM_LOG:
-                bot.sendMessage(userName, "An error has been founded, stopping execution. Waiting for correction.")
+                bot.sendMessage(userName, toPrint)
             exit()
 
         print("\n[INFO] Image processing over.\n")
