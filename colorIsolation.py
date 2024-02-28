@@ -66,13 +66,19 @@ def filteringImage(image_path, subjectNumber, imageNumber):
     # Create a mask for the specified color range
     mask = hue_lower_mask*saturation_mask*hue_upper_mask
 
-    # [367-377, 261-274] are the [x,y] values where the soap pointer is
-    # [370-397, 294-320] are the [x,y] values to obscure in order to not find the wrong soap point 
+    # Remove the clamp yellow
+    if subjectNumber < 8:
+        mask[600:670,700:770] = 0
+    elif subjectNumber < 22:
+        mask[580:690,550:670] = 0
+    else:
+        mask[580:700,630:730] = 0
+
     mask[soapLimits[subjectNumber,0]:soapLimits[subjectNumber,1],soapLimits[subjectNumber,2]:soapLimits[subjectNumber,3]] = 0
     mask[soapLimits[subjectNumber,4]:soapLimits[subjectNumber,5],soapLimits[subjectNumber,6]:soapLimits[subjectNumber,7]] = 1
 
     # Show results
-    if SHOW_PLOT | imageNumber == 0:
+    if SHOW_PLOT or imageNumber == 0:
         # Apply the mask to the original image
         reverseMask = -(mask-1)
         red = img[:,:,0]*reverseMask
@@ -82,7 +88,7 @@ def filteringImage(image_path, subjectNumber, imageNumber):
         plt.figure(num=None, figsize=(8, 6), dpi=80)
         plt.imshow(img_masked)
         plt.show(block=False)
-        plt.pause(3)
+        plt.pause(15)
         plt.close()
     
     # Usefull matrix
@@ -268,12 +274,12 @@ def filesCounter(folderNumber: int) -> int:
     return count-NOT_COUNTED_FILES
 
 # VARIABLES AND CONSTANTS ---------------------------------------------------------------------------------------------------------------------------
-IMAGE_WIDTH_PX = 640    # Width of the picture analyzed (equal for all of them)
-IMAGE_HEIGTH_PX = 480   # Height of the picture analyzed (equal for all of them)
-IMAGE_PPI = 72          # PPI resolution of the picture analyzed
+IMAGE_WIDTH_PX = 1280   # Width of the picture analyzed (equal for all of them)
+IMAGE_HEIGTH_PX = 720   # Height of the picture analyzed (equal for all of them)
+IMAGE_PPI = 144         # PPI resolution of the picture analyzed
 
 WIRE_REAL_LENGTH = 800  # [mm] is the length of the cable in the real world (considering the end of the yellow marker)
-WIRE_IMAGE_LENGTH = 40  # [mm] evaluated from test analysis
+WIRE_IMAGE_LENGTH = 80  # [mm] evaluated from test analysis
 
 SHOW_PLOT = 0           # 0 if no showing images, 1 if showing all images and process
 DEBUG = 0               # 0 if normal functioning, 1 if entering in debug mode and display more details of whats happening during the execution
@@ -283,22 +289,36 @@ NOT_COUNTED_FILES = 3   # Number of files in the experiment folder to not count 
 
 TELEGRAM_LOG = 1        # 0 if the log is not reported
 
-soapLimits = np.array([[294,320,370,397,261,274,367,377],[295,320,355,380,260,280,350,370],
-                       [295,320,360,385,260,280,360,375],[295,315,245,270,255,273,258,275],
-                       [298,318,360,385,260,278,357,374],[295,315,245,265,260,278,260,275],
-                       [0,0,0,0,0,0,0,0],[295,316,248,270,255,275,262,280],
-                       [295,318,247,273,258,275,263,278],[295,318,250,272,259,277,261,280],
-                       [295,318,250,270,258,275,261,278],[300,320,362,386,268,284,357,371],
-                       [0,0,0,0,0,0,0,0],[300,320,365,386,262,278,359,372],
-                       [300,320,365,385,263,280,355,370],[300,320,365,385,263,280,354,370],
-                       [321,342,370,392,283,298,361,378],[0,0,0,0,0,0,0,0],
-                       [320,340,270,290,284,300,287,300],[0,0,0,0,0,0,0,0],
-                       [323,343,256,276,288,305,271,286],[323,346,255,275,286,303,270,285],
-                       [280,300,264,285,240,255,275,289],[275,300,264,286,241,257,277,293],
-                       [280,300,264,286,244,260,276,291],[0,0,0,0,0,0,0,0],
-                       [270,290,280,300,241,260,284,296],[281,303,358,380,244,261,352,364],
-                       [282,303,361,384,244,260,357,371],[281,303,363,385,243,260,358,371],
-                       [282,303,363,385,244,260,359,371],[282,303,371,393,245,261,366,379]])
+soapLimits = np.array([[0,720,0,200,370,385,750,768],       #1R
+                       [0,720,0,200,370,385,750,768],       #2R
+                       [0,720,0,200,370,385,750,768],       #3R
+                       [0,720,0,200,370,385,750,768],       #4R
+                       [0,720,0,200,370,385,750,768],       #5R
+                       [0,720,0,200,370,385,750,768],       #6R
+                       [0,720,0,200,370,385,750,768],       #7R
+                       [0,720,0,170,375,390,580,592],       #8L
+                       [0,720,0,170,375,390,580,592],       #9L
+                       [0,720,0,170,375,390,580,592],       #10L
+                       [0,720,0,170,375,390,580,592],       #11L
+                       [0,720,0,170,375,390,580,592],       #12L
+                       [0,720,0,170,375,390,580,592],       #13L
+                       [0,720,0,170,375,390,580,592],       #14L
+                       [0,720,0,170,375,390,580,592],       #15L
+                       [0,0,0,0,0,0,0,0],                   #16L
+                       [0,720,0,170,375,390,580,592],       #17L
+                       [0,720,0,170,375,390,580,592],       #18L
+                       [0,720,0,170,375,390,580,592],       #19L
+                       [0,720,0,170,375,390,580,592],       #20L
+                       [0,720,0,170,375,390,580,592],       #21L
+                       [0,720,0,180,372,390,692,708],       #22R
+                       [0,720,0,180,372,390,692,708],       #23R
+                       [0,720,0,180,372,390,670,690],       #24R
+                       [0,720,0,180,372,390,692,708],       #25R
+                       [0,720,0,180,372,390,680,695],       #26R
+                       [0,720,0,180,372,390,692,708],       #27R
+                       [0,720,0,180,372,390,692,708],       #28R
+                       [0,720,0,180,372,390,692,708],       #29R
+                       [0,0,0,0,0,0,0,0]])                  #30L
 
 # Telegram Bot creation for notification
 userName = 486322403
@@ -326,16 +346,17 @@ if __name__ == "__main__":
         # Check if current path is a directory
         if os.path.isdir(os.path.join(dir_path, path)):
             numTests += 1
+    numTests -= 1 #removing the folder P1_00001
     errorInput = 1
     while errorInput == 1:
         errorInput = 0
-        firstTest = int(input(f"\nThere are {str(numTests)} available, from which do you want to start? [1:32]: "))
+        firstTest = int(input(f"\nThere are {str(numTests)} available, from which do you want to start? [1:{str(numTests)}]: "))
         if firstTest < 1 or firstTest > numTests:
             errorInput = 1
             print(f"\nNope, you ask something impossible, retry.\n")
         else:
-            lastTest = int(input(f"Ok, starting from {str(firstTest)}, and at which do you want to end? [1:32]: "))
-            if lastTest < 1 or lastTest > numTests:
+            lastTest = int(input(f"Ok, starting from {str(firstTest)}, and at which do you want to end? [{str(firstTest)}:{str(numTests)}]: "))
+            if lastTest < firstTest or lastTest > numTests:
                 errorInput = 1
                 print(f"\nNope, you ask something impossible, retry.\n")
         
@@ -350,13 +371,13 @@ if __name__ == "__main__":
             cnt = firstTest
             while cnt < lastTest+1:
                 # Avoid test with no data or discarded
-                if cnt in [7,13,18,20,26]:
+                if cnt in [16, 30]:
                     toPrint = f"[DISCARD] Test {str(cnt)} discarded."
                     print("\n" + toPrint)
                     if TELEGRAM_LOG:
                         bot.sendMessage(userName, toPrint)
                     cnt += 1
-                    if cnt > numTests+1:
+                    if cnt > numTests:
                         break
 
                 toPrint = f"[START] Starting processing on test {str(cnt)}..."
@@ -364,7 +385,7 @@ if __name__ == "__main__":
                 if TELEGRAM_LOG:
                     bot.sendMessage(userName, toPrint)
                 numImages = filesCounter(cnt)
-                
+
                 leftLengthArray = [] 
                 rightLengthArray = [] 
                 leftAngleArray = [] 
@@ -386,11 +407,12 @@ if __name__ == "__main__":
                             totalLength = leftLength + rightLength
                             # An error is been found but is still admitted so its just reported
                             if leftLength == -1 and rightLength == -1 and leftAngle == -1 and rightAngle == -1:
-                                print("\n[WARNING] An error on marker recognising has been found, but is still admissibile.")
-                                if ADMITTED_ERRORS-collectedErrors > 0:
-                                    print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
-                                else: 
-                                    print(f"          No more admissible errors remaining.")
+                                if 0: # Avoid printing all these informations
+                                    print("\n[WARNING] An error on marker recognising has been found, but is still admissibile.")
+                                    if ADMITTED_ERRORS-collectedErrors > 0:
+                                        print(f"          Only {str(ADMITTED_ERRORS-collectedErrors)} admissible errors remaining.")
+                                    else: 
+                                        print(f"          No more admissible errors remaining.")
                             else:
                                 # Save data for the average at the end
                                 leftLengthArray.append(leftLength)
@@ -432,9 +454,16 @@ if __name__ == "__main__":
                                         np.mean(totalLengthArray,dtype=np.float64),np.std(totalLengthArray,dtype=np.float64),
                                         np.mean(leftAngleArray,dtype=np.float64),np.std(leftAngleArray,dtype=np.float64),
                                         np.mean(rightAngleArray,dtype=np.float64),np.std(rightAngleArray,dtype=np.float64)])
+
+                toPrint = f"[INFO] Dataset {str(cnt)} has a found those mean angle [" + "{:.2f}".format(np.mean(leftAngleArray,dtype=np.float64)) + ", " + "{:.2f}".format(np.mean(rightAngleArray,dtype=np.float64)) +  "]."
                 if TELEGRAM_LOG:
-                    bot.sendMessage(userName, f"[INFO] Processing of dataset {str(cnt)} is done. Has been found {str(collectedErrors)} admissible errors.")
-                print("\n[END] Done.")
+                    bot.sendMessage(userName, toPrint)
+                print("\n" + toPrint)
+
+                toPrint = f"[END] Processing of dataset {str(cnt)} is done. Has been found {str(collectedErrors)} admissible errors."
+                if TELEGRAM_LOG:
+                    bot.sendMessage(userName, toPrint)
+                print("\n" + toPrint)
 
                 if i == round(numTests/4):
                     text = "[INFO] Analysis processing status: 25" + '%' + " completed."
